@@ -100,7 +100,7 @@ TaskHandle_t xHandle = NULL;
 
 void BleKeyboard::begin(void)
 {
-  xTaskCreate(this->taskServer, "server", 4096, (void *)this, 5, &xHandle);
+  taskServer();
 }
 
 void BleKeyboard::end(void)
@@ -118,45 +118,42 @@ void BleKeyboard::setBatteryLevel(uint8_t level) {
     this->hid->setBatteryLevel(this->batteryLevel);
 }
 
-void BleKeyboard::taskServer(void* pvParameter) {
-  BleKeyboard* bleKeyboardInstance = (BleKeyboard *) pvParameter; //static_cast<BleKeyboard *>(pvParameter);
-  BLEDevice::init(bleKeyboardInstance->deviceName);
+void BleKeyboard::taskServer() {
+  BLEDevice::init(deviceName);
   BLEServer *pServer = BLEDevice::createServer();
-  pServer->setCallbacks(bleKeyboardInstance->connectionStatus);
+  pServer->setCallbacks(connectionStatus);
 
-  bleKeyboardInstance->hid = new BLEHIDDevice(pServer);
-  bleKeyboardInstance->inputKeyboard = bleKeyboardInstance->hid->inputReport(KEYBOARD_ID); // <-- input REPORTID from report map
-  bleKeyboardInstance->outputKeyboard = bleKeyboardInstance->hid->outputReport(KEYBOARD_ID);
-  bleKeyboardInstance->inputMediaKeys = bleKeyboardInstance->hid->inputReport(MEDIA_KEYS_ID);
-  bleKeyboardInstance->connectionStatus->inputKeyboard = bleKeyboardInstance->inputKeyboard;
-  bleKeyboardInstance->connectionStatus->outputKeyboard = bleKeyboardInstance->outputKeyboard;
-	bleKeyboardInstance->connectionStatus->inputMediaKeys = bleKeyboardInstance->inputMediaKeys;
+  hid = new BLEHIDDevice(pServer);
+  inputKeyboard = hid->inputReport(KEYBOARD_ID); // <-- input REPORTID from report map
+  outputKeyboard = hid->outputReport(KEYBOARD_ID);
+  inputMediaKeys = hid->inputReport(MEDIA_KEYS_ID);
+  connectionStatus->inputKeyboard = inputKeyboard;
+  connectionStatus->outputKeyboard = outputKeyboard;
+  connectionStatus->inputMediaKeys = inputMediaKeys;
 
-  bleKeyboardInstance->outputKeyboard->setCallbacks(new KeyboardOutputCallbacks());
+  outputKeyboard->setCallbacks(new KeyboardOutputCallbacks());
 
-  bleKeyboardInstance->hid->manufacturer()->setValue(bleKeyboardInstance->deviceManufacturer);
+  hid->manufacturer()->setValue(deviceManufacturer);
 
-  bleKeyboardInstance->hid->pnp(0x02, 0xe502, 0xa111, 0x0210);
-  bleKeyboardInstance->hid->hidInfo(0x00,0x01);
+  hid->pnp(0x02, 0xe502, 0xa111, 0x0210);
+  hid->hidInfo(0x00,0x01);
 
   BLESecurity *pSecurity = new BLESecurity();
 
   pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND);
 
-  bleKeyboardInstance->hid->reportMap((uint8_t*)_hidReportDescriptor, sizeof(_hidReportDescriptor));
-  bleKeyboardInstance->hid->startServices();
+  hid->reportMap((uint8_t*)_hidReportDescriptor, sizeof(_hidReportDescriptor));
+  hid->startServices();
 
-  bleKeyboardInstance->onStarted(pServer);
+  onStarted(pServer);
 
   BLEAdvertising *pAdvertising = pServer->getAdvertising();
   pAdvertising->setAppearance(HID_KEYBOARD);
-  pAdvertising->addServiceUUID(bleKeyboardInstance->hid->hidService()->getUUID());
+  pAdvertising->addServiceUUID(hid->hidService()->getUUID());
   pAdvertising->setScanResponse(false);
   pAdvertising->start();
-  bleKeyboardInstance->hid->setBatteryLevel(bleKeyboardInstance->batteryLevel);
-
+  hid->setBatteryLevel(batteryLevel);
   ESP_LOGD(LOG_TAG, "Advertising started!");
-  vTaskDelay(portMAX_DELAY); //delay(portMAX_DELAY);
 }
 
 void BleKeyboard::sendReport(KeyReport* keys)
